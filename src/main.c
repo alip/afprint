@@ -64,6 +64,7 @@ const char *create_print(int fd, int close_desc) {
     SNDFILE *input;
     SF_INFO info;
 
+    info.format = 0;
     input = sf_open_fd(fd, SFM_READ, &info, close_desc);
     if (NULL == input) {
         fprintf(stderr, PACKAGE": %s\n", sf_strerror(NULL));
