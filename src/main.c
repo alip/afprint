@@ -110,7 +110,7 @@ const char *create_print(int fd, int close_desc) {
     }
     assert(info.frames == sf_readf_short(input, data, info.frames));
     const char *p = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
-            info.frames, info.samplerate, info.channels == 2 ? 1 : 0);
+            info.frames, info.samplerate, 2 == info.channels ? 1 : 0);
 
     sf_close(input);
     free(data);
