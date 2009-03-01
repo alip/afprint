@@ -18,6 +18,7 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <assert.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
@@ -97,18 +98,21 @@ const char *create_print(int fd, int close_desc) {
         format_info.format = info.format;
         sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
         lg("Format: %s", format_info.name);
+        lg("Frames: %ld", info.frames);
+        lg("Channels: %d", info.channels);
+        lg("Samplerate: %dHz", info.samplerate);
     }
 
     short *data = malloc(info.frames * info.channels * sizeof(short));
     if (NULL == data) {
-        fprintf(stderr, PACKAGE": malloc failed: %s", strerror(errno));
+        fprintf(stderr, PACKAGE": %s", strerror(errno));
         return NULL;
     }
-    sf_readf_short(input, data, info.frames);
-    sf_close(input);
-
+    assert(info.frames == sf_readf_short(input, data, info.frames));
     const char *p = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
             info.frames, info.samplerate, info.channels == 2 ? 1 : 0);
+
+    sf_close(input);
     free(data);
     return p;
 }
