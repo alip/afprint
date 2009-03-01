@@ -18,12 +18,13 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <assert.h>
 #include <errno.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <ofa1/ofa.h>
 #include <sndfile.h>
@@ -37,6 +38,13 @@
 #else
 #define ENDIAN_CPU OFA_LITTLE_ENDIAN
 #endif
+
+static int verbose;
+
+// Prototypes
+void __lg(const char *func, size_t len, const char *fmt, ...)
+    __attribute__ ((format (printf, 3, 4)));
+#define lg(...)     __lg(__func__, __LINE__, __VA_ARGS__)
 
 void about(void) {
     fprintf(stderr, PACKAGE"-"VERSION);
@@ -54,31 +62,49 @@ void usage(void) {
         fprintf(stderr, "-"GITHEAD);
 #endif
     fprintf(stderr, " audio fingerprinting tool\n");
-    fprintf(stderr, "Usage: "PACKAGE" < file.wav\n");
+    fprintf(stderr, "Usage: "PACKAGE" < /path/to/libsndfile/supported/audio/file\n");
     fprintf(stderr, "\nOptions:\n");
     fprintf(stderr, "\t-h, --help\tYou're looking at it :)\n");
     fprintf(stderr, "\t-V, --version\tShow version information\n");
+    fprintf(stderr, "\t-v, --verbose\tBe verbose\n");
+}
+
+void __lg(const char *func, size_t len, const char *fmt, ...) {
+    va_list args;
+
+    fprintf(stderr, PACKAGE"@%ld: [%s():%zu] ", time(NULL), func, len);
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+
+    fputc('\n', stderr);
 }
 
 const char *create_print(int fd, int close_desc) {
     SNDFILE *input;
     SF_INFO info;
 
+    if (verbose)
+        lg("Opening fd %d for reading", fd);
     info.format = 0;
     input = sf_open_fd(fd, SFM_READ, &info, close_desc);
     if (NULL == input) {
         fprintf(stderr, PACKAGE": %s\n", sf_strerror(NULL));
         return NULL;
     }
-    assert(info.format & SF_FORMAT_WAV);
-    assert(info.format & SF_FORMAT_PCM_16);
+    if (verbose) {
+        SF_FORMAT_INFO format_info;
+        format_info.format = info.format;
+        sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
+        lg("Format: %s", format_info.name);
+    }
 
-    int *data = malloc(info.frames * info.channels * sizeof(int));
+    short *data = malloc(info.frames * info.channels * sizeof(short));
     if (NULL == data) {
         fprintf(stderr, PACKAGE": malloc failed: %s", strerror(errno));
         return NULL;
     }
-    sf_readf_int(input, data, info.frames);
+    sf_readf_short(input, data, info.frames);
     sf_close(input);
 
     const char *p = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
@@ -92,10 +118,12 @@ int main(int argc, char **argv) {
     static struct option long_options[] = {
         {"help",    no_argument, NULL, 'h'},
         {"version", no_argument, NULL, 'V'},
+        {"verbose", no_argument, NULL, 'v'},
         {0, 0, NULL, 0}
     };
 
-    while (-1 != (optc = getopt_long(argc, argv, "hV", long_options, NULL))) {
+    verbose = 0;
+    while (-1 != (optc = getopt_long(argc, argv, "hVv", long_options, NULL))) {
         switch (optc) {
             case 'h':
                 usage();
@@ -103,6 +131,9 @@ int main(int argc, char **argv) {
             case 'V':
                 about();
                 return EXIT_SUCCESS;
+            case 'v':
+                verbose = 1;
+                break;
             case '?':
             default:
                 fprintf(stderr, "try "PACKAGE" --help for more information\n");
