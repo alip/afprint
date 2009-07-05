@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 /*
- * Copyright (c) 2009 Ali Polatel
+ * Copyright (c) 2009 Ali Polatel <polatel@gmail.com>
  *
  * This file is part of the afprint audio fingerprint tool. afprint is free
  * software; you can redistribute it and/or modify it under the terms of the
@@ -46,8 +46,14 @@ static int verbose;
 void __lg(const char *func, size_t len, const char *fmt, ...)
     __attribute__ ((format (printf, 3, 4)));
 #define lg(...)     __lg(__func__, __LINE__, __VA_ARGS__)
+#define lgv(...)                                        \
+        do {                                            \
+            if (verbose)                                \
+                __lg(__func__, __LINE__, __VA_ARGS__);  \
+        } while (0)
 
-void about(void) {
+void about(void)
+{
     fprintf(stderr, PACKAGE"-"VERSION);
 #ifdef GITHEAD
     if (0 != strlen(GITHEAD))
@@ -56,7 +62,8 @@ void about(void) {
     fputc('\n', stderr);
 }
 
-void usage(void) {
+void usage(void)
+{
     fprintf(stderr, PACKAGE"-"VERSION);
 #ifdef GITHEAD
     if (0 != strlen(GITHEAD))
@@ -70,10 +77,11 @@ void usage(void) {
     fprintf(stderr, "\t-v, --verbose\tBe verbose\n");
 }
 
-void __lg(const char *func, size_t len, const char *fmt, ...) {
+void __lg(const char *func, size_t len, const char *fmt, ...)
+{
     va_list args;
 
-    fprintf(stderr, PACKAGE"@%ld: [%s():%zu] ", time(NULL), func, len);
+    fprintf(stderr, PACKAGE"@%ld: [%s:%zu] ", time(NULL), func, len);
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
     va_end(args);
@@ -81,18 +89,22 @@ void __lg(const char *func, size_t len, const char *fmt, ...) {
     fputc('\n', stderr);
 }
 
-const char *create_print(int fd, int close_desc) {
+const char *create_print(int fd, int close_desc)
+{
+    const char *fp;
+    short *data;
+    int essential_frames, ret;
     SNDFILE *input;
     SF_INFO info;
 
-    if (verbose)
-        lg("Opening fd %d for reading", fd);
+    lgv("Opening fd %d for reading", fd);
     info.format = 0;
     input = sf_open_fd(fd, SFM_READ, &info, close_desc);
     if (NULL == input) {
-        fprintf(stderr, PACKAGE": %s\n", sf_strerror(NULL));
+        lg("Failed to open file: %s", sf_strerror(NULL));
         return NULL;
     }
+
     if (verbose) {
         SF_FORMAT_INFO format_info;
         format_info.format = info.format;
@@ -103,21 +115,30 @@ const char *create_print(int fd, int close_desc) {
         lg("Samplerate: %dHz", info.samplerate);
     }
 
-    short *data = malloc(info.frames * info.channels * sizeof(short));
+    data = malloc(info.frames * info.channels * sizeof(short));
     if (NULL == data) {
-        fprintf(stderr, PACKAGE": %s", strerror(errno));
+        lg("Failed to allocate memory for data: %s", strerror(errno));
         return NULL;
     }
-    assert(info.frames == sf_readf_short(input, data, info.frames));
-    const char *p = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
-            info.frames, info.samplerate, 2 == info.channels ? 1 : 0);
+
+    // Only get first 135 seconds
+    essential_frames = 135 * info.samplerate;
+    if (essential_frames > info.frames)
+        essential_frames = info.frames;
+    ret = sf_readf_short(input, data, essential_frames);
+    assert(essential_frames == ret);
+
+    fp = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
+            essential_frames, info.samplerate, 2 == info.channels);
 
     sf_close(input);
     free(data);
-    return p;
+    return fp;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
+    const char *fp;
     int optc;
     static struct option long_options[] = {
         {"help",    no_argument, NULL, 'h'},
@@ -145,9 +166,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    const char *p = create_print(fileno(stdin), 0);
-    if (NULL == p)
+    fp = create_print(fileno(stdin), 0);
+    if (NULL == fp)
         return EXIT_FAILURE;
-    printf("%s\n", p);
+    printf("%s\n", fp);
     return EXIT_SUCCESS;
 }
+
