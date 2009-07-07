@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -141,6 +142,7 @@ const char *create_print(int fd, int close_desc)
 
 int main(int argc, char **argv)
 {
+    bool isstdin;
     const char *fingerprint;
     int optc, fd, ret;
     FILE *fp;
@@ -177,10 +179,13 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    isstdin = false;
     ret = EXIT_SUCCESS;
     for (int i = 0; i < argc; i++) {
-        if (0 == strncmp(argv[i], "-", 2))
+        if (0 == strncmp(argv[i], "-", 2)) {
+            isstdin = true;
             fd = fileno(stdin);
+        }
         else {
             fp = fopen(argv[i], "r");
             if (NULL == fp) {
@@ -195,7 +200,8 @@ int main(int argc, char **argv)
             ret = EXIT_FAILURE;
             continue;
         }
-        printf("%s: %s\n", argv[i], fingerprint);
+        printf("%s: %s\n", isstdin ? "/dev/stdin" : argv[i], fingerprint);
+        isstdin = false;
     }
     return ret;
 }
