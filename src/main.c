@@ -100,11 +100,11 @@ const char *create_print(int fd, int close_desc)
     SNDFILE *input;
     SF_INFO info;
 
-    lgv("opening fd %d for reading", fd);
+    lgv("Opening fd %d for reading", fd);
     info.format = 0;
     input = sf_open_fd(fd, SFM_READ, &info, close_desc);
     if (NULL == input) {
-        lg("failed to open file: %s", sf_strerror(NULL));
+        lg("Failed to open file: %s", sf_strerror(NULL));
         return NULL;
     }
 
@@ -120,7 +120,7 @@ const char *create_print(int fd, int close_desc)
 
     data = malloc(info.frames * info.channels * sizeof(short));
     if (NULL == data) {
-        lg("failed to allocate memory for data: %s", strerror(errno));
+        lg("Failed to allocate memory for data: %s", strerror(errno));
         return NULL;
     }
     memset(data, 0, info.frames * info.channels * sizeof(short));
@@ -174,7 +174,7 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
     if (0 == argc) {
-        lg("no file given!");
+        lg("No file given!");
         return EXIT_FAILURE;
     }
 
@@ -185,7 +185,7 @@ int main(int argc, char **argv)
         else {
             fp = fopen(argv[i], "r");
             if (NULL == fp) {
-                lg("failed to open file `%s': %s", argv[i], strerror(errno));
+                lg("Failed to open file `%s': %s", argv[i], strerror(errno));
                 ret = EXIT_FAILURE;
                 continue;
             }
