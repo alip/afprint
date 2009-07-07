@@ -54,7 +54,7 @@ dnl }}}
 dnl {{{ extra cflags for gcc
 AFPRINT_CFLAGS=
 if test x"$GCC" = x"yes"; then
-	AFPRINT_CFLAGS="$AFPRINT_CFLAGS -Wall -pedantic"
+	AFPRINT_CFLAGS="$AFPRINT_CFLAGS -Wall -Wextra -pedantic"
 fi
 AC_SUBST([AFPRINT_CFLAGS])
 dnl }}}
