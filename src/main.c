@@ -127,8 +127,11 @@ const char *create_print(int fd, int close_desc)
     memset(data, 0, info.frames * info.channels * sizeof(short));
 
     essential_frames = ESSENTIAL_SECONDS * info.samplerate * info.channels;
-    if (essential_frames > info.frames)
+    lgv("Reading audio data, essential seconds: %d essential frames: %d", ESSENTIAL_SECONDS, essential_frames);
+    if (essential_frames > info.frames) {
+        lgv("Essential frames: %d > info.frames: %ld, adjusting", essential_frames, info.frames);
         essential_frames = info.frames;
+    }
     ret = sf_readf_short(input, data, essential_frames);
     assert(essential_frames == ret);
 
