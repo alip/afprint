@@ -179,7 +179,7 @@ int main(int argc, char **argv)
     }
 
     ret = EXIT_SUCCESS;
-    for (unsigned int i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         if (0 == strncmp(argv[i], "-", 2))
             fd = fileno(stdin);
         else {
