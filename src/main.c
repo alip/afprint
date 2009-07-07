@@ -40,6 +40,8 @@
 #define ENDIAN_CPU OFA_LITTLE_ENDIAN
 #endif
 
+#define ESSENTIAL_SECONDS   135
+
 static int verbose;
 
 // Prototypes
@@ -121,9 +123,10 @@ const char *create_print(int fd, int close_desc)
         lg("failed to allocate memory for data: %s", strerror(errno));
         return NULL;
     }
+    memset(data, 0, info.frames * info.channels * sizeof(short));
 
-    // Only get first 135 seconds
-    essential_frames = 135 * info.samplerate;
+    // Only get first ESSENTIAL_SECONDS seconds
+    essential_frames = ESSENTIAL_SECONDS * info.samplerate * info.channels;
     if (essential_frames > info.frames)
         essential_frames = info.frames;
     ret = sf_readf_short(input, data, essential_frames);
