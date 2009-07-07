@@ -70,11 +70,12 @@ void usage(void)
         fprintf(stderr, "-"GITHEAD);
 #endif
     fprintf(stderr, " audio fingerprinting tool\n");
-    fprintf(stderr, "Usage: "PACKAGE" < /path/to/libsndfile/supported/audio/file\n");
+    fprintf(stderr, "Usage: "PACKAGE" [-hVv] /path/to/libsndfile/supported/audio/file...\n");
     fprintf(stderr, "\nOptions:\n");
     fprintf(stderr, "\t-h, --help\tYou're looking at it :)\n");
     fprintf(stderr, "\t-V, --version\tShow version information\n");
     fprintf(stderr, "\t-v, --verbose\tBe verbose\n");
+    fprintf(stderr, "If filename is '-' "PACKAGE" reads from standard input.\n");
 }
 
 void __lg(const char *func, size_t len, const char *fmt, ...)
@@ -97,11 +98,11 @@ const char *create_print(int fd, int close_desc)
     SNDFILE *input;
     SF_INFO info;
 
-    lgv("Opening fd %d for reading", fd);
+    lgv("opening fd %d for reading", fd);
     info.format = 0;
     input = sf_open_fd(fd, SFM_READ, &info, close_desc);
     if (NULL == input) {
-        lg("Failed to open file: %s", sf_strerror(NULL));
+        lg("failed to open file: %s", sf_strerror(NULL));
         return NULL;
     }
 
@@ -117,7 +118,7 @@ const char *create_print(int fd, int close_desc)
 
     data = malloc(info.frames * info.channels * sizeof(short));
     if (NULL == data) {
-        lg("Failed to allocate memory for data: %s", strerror(errno));
+        lg("failed to allocate memory for data: %s", strerror(errno));
         return NULL;
     }
 
@@ -138,8 +139,9 @@ const char *create_print(int fd, int close_desc)
 
 int main(int argc, char **argv)
 {
-    const char *fp;
-    int optc;
+    const char *fingerprint;
+    int optc, fd, ret;
+    FILE *fp;
     static struct option long_options[] = {
         {"help",    no_argument, NULL, 'h'},
         {"version", no_argument, NULL, 'V'},
@@ -166,10 +168,33 @@ int main(int argc, char **argv)
         }
     }
 
-    fp = create_print(fileno(stdin), 0);
-    if (NULL == fp)
+    argc -= optind;
+    argv += optind;
+    if (0 == argc) {
+        lg("no file given!");
         return EXIT_FAILURE;
-    printf("%s\n", fp);
-    return EXIT_SUCCESS;
+    }
+
+    ret = EXIT_SUCCESS;
+    for (unsigned int i = 0; i < argc; i++) {
+        if (0 == strncmp(argv[i], "-", 2))
+            fd = fileno(stdin);
+        else {
+            fp = fopen(argv[i], "r");
+            if (NULL == fp) {
+                lg("failed to open file `%s': %s", argv[i], strerror(errno));
+                ret = EXIT_FAILURE;
+                continue;
+            }
+            fd = fileno(fp);
+        }
+        fingerprint = create_print(fd, 1);
+        if (NULL == fingerprint) {
+            ret = EXIT_FAILURE;
+            continue;
+        }
+        printf("%s: %s\n", argv[i], fingerprint);
+    }
+    return ret;
 }
 
