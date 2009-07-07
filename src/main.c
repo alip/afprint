@@ -125,7 +125,6 @@ const char *create_print(int fd, int close_desc)
     }
     memset(data, 0, info.frames * info.channels * sizeof(short));
 
-    // Only get first ESSENTIAL_SECONDS seconds
     essential_frames = ESSENTIAL_SECONDS * info.samplerate * info.channels;
     if (essential_frames > info.frames)
         essential_frames = info.frames;
