@@ -94,7 +94,7 @@ void __lg(const char *func, size_t len, const char *fmt, ...)
 
 const char *create_print(int fd, int close_desc)
 {
-    const char *fp;
+    const char *fingerprint;
     short *data;
     int essential_frames, ret;
     SNDFILE *input;
@@ -132,12 +132,12 @@ const char *create_print(int fd, int close_desc)
     ret = sf_readf_short(input, data, essential_frames);
     assert(essential_frames == ret);
 
-    fp = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
+    fingerprint = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
             essential_frames, info.samplerate, 2 == info.channels);
 
     sf_close(input);
     free(data);
-    return fp;
+    return fingerprint;
 }
 
 int main(int argc, char **argv)
