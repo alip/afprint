@@ -82,7 +82,7 @@ static void
 usage(FILE *outf, int exitval)
 {
 	fprintf(outf, PACKAGE"-"VERSION GIT_HEAD" audio fingerprinting tool\n"
-			"Usage: "PACKAGE" [-hVv] /path/to/libsndfile/supported/audio/file...\n"
+			"Usage: "PACKAGE" [-hVv] /path/to/audio/file...\n"
 			"\nOptions:\n"
 			"\t-h, --help\tYou're looking at it :)\n"
 			"\t-V, --version\tShow version information\n"
