@@ -100,6 +100,7 @@ dump_fingerprint(const char *path)
 	const char *fingerprint;
 	short *data;
 	int essential_frames, ret;
+	long duration;
 	SNDFILE *input;
 	SF_INFO info;
 	SF_FORMAT_INFO format_info;
@@ -117,12 +118,14 @@ dump_fingerprint(const char *path)
 		return false;
 	}
 
+	duration = ((1.0 * info.frames) / info.samplerate) * 1000;
 	format_info.format = info.format;
 	sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
 	lgv("Format: %s", format_info.name);
 	lgv("Frames: %ld", info.frames);
 	lgv("Channels: %d", info.channels);
 	lgv("Samplerate: %dHz", info.samplerate);
+	lgv("Duration: %ldms", duration);
 
 	if ((data = malloc(info.frames * info.channels * sizeof(short))) == NULL) {
 		lg("Failed to allocate memory for data: %s", strerror(errno));
@@ -148,7 +151,9 @@ dump_fingerprint(const char *path)
 		printf("/dev/stdin.%s", format_info.extension);
 	else
 		printf("%s", path);
+	fputc(print0 ? '\0' : ' ', stdout);
 
+	printf("%ld", duration);
 	fputc(print0 ? '\0' : ' ', stdout);
 
 	printf("%s\n", fingerprint);
