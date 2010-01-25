@@ -8,8 +8,8 @@ die() {
 
 echo ">>> rm -f config.cache"
 rm -f config.cache
-echo ">>> aclocal"
-aclocal || die "aclocal failed"
+echo ">>> aclocal -I m4"
+aclocal -I m4 || die "aclocal failed"
 echo ">>> autoheader"
 autoheader || die "autoheader failed"
 echo ">>> autoconf"

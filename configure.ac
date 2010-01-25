@@ -18,20 +18,24 @@ AM_INIT_AUTOMAKE(afprint, [$VERSION_FULL])
 dnl {{{ git revision
 AC_MSG_CHECKING([for git head])
 if test -d "${GIT_DIR:-${ac_top_srcdir:-./}/.git}" ; then
-	GITHEAD=`git describe 2>/dev/null`
-	if test -z ${GITHEAD} ; then
-		GITHEAD=`git rev-parse --short HEAD`
+	GIT_HEAD=`git describe 2>/dev/null`
+	if test -z ${GIT_HEAD} ; then
+		GIT_HEAD=`git rev-parse --short HEAD`
 	fi
 	if test -n "`git diff-index -m --name-only HEAD`" ; then
-		GITHEAD=${GITHEAD}-dirty
+		GIT_HEAD=${GIT_HEAD}-dirty
+	fi
+	if test -n "${GIT_HEAD}" ; then
+		GIT_HEAD="-${GIT_HEAD}"
 	fi
 fi
-AC_MSG_RESULT([$GITHEAD])
-AC_SUBST([GITHEAD])
+AC_MSG_RESULT([$GIT_HEAD])
+AC_SUBST([GIT_HEAD])
 dnl }}}
 dnl }}}
 
 dnl {{{ toolchain checks
+AC_PROG_CC
 AC_PROG_CC_C99
 if test x"$ac_cv_prog_cc_c99" = x"no"; then
 	AC_MSG_ERROR([afprint requires a C compiler that supports ISO C99!])
@@ -51,11 +55,12 @@ PKG_CHECK_MODULES([libsndfile], [sndfile],,
 				  [AC_MSG_ERROR([afprint requires libsndfile])])
 dnl }}}
 
-dnl {{{ extra cflags for gcc
+dnl {{{ extra cflags
 AFPRINT_CFLAGS=
-if test x"$GCC" = x"yes"; then
-	AFPRINT_CFLAGS="$AFPRINT_CFLAGS -Wall -Wextra -pedantic"
-fi
+WANTED_CFLAGS="-pedantic -Wall -W -Wextra -Wbad-function-cast -Wcast-align -Wcast-qual -Wfloat-equal -Wformat=2 -Wformat-security -Wformat-nonliteral -Winit-self -Winline -Wlogical-op -Wmissing-prototypes -Wmissing-declarations -Wmissing-format-attribute -Wmissing-noreturn -Wpointer-arith -Wredundant-decls -Wshadow -Wswitch-default -Wunused -Wvla"
+for flag in $WANTED_CFLAGS ; do
+	AX_CHECK_COMPILER_FLAGS([$flag], [AFPRINT_CFLAGS="$AFPRINT_CFLAGS $flag"],)
+done
 AC_SUBST([AFPRINT_CFLAGS])
 dnl }}}
 
