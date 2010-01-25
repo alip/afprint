@@ -48,7 +48,8 @@ dnl {{{ check for byte order
 AC_C_BIGENDIAN
 dnl }}}
 
-dnl {{{ check for external libraries
+dnl {{{ check for libraries
+PKG_PROG_PKG_CONFIG([0.20.0])
 PKG_CHECK_MODULES([libofa], [libofa],,
 				  [AC_MSG_ERROR([afprint requires libofa])])
 PKG_CHECK_MODULES([libsndfile], [sndfile],,
