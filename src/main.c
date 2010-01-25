@@ -43,7 +43,8 @@
 
 #define ESSENTIAL_SECONDS 135
 
-static int verbose;
+static bool verbose;
+static bool print0;
 
 #define lg(...) __lg(__func__, __LINE__, __VA_ARGS__)
 #define lgv(...)						\
@@ -82,41 +83,46 @@ static void
 usage(FILE *outf, int exitval)
 {
 	fprintf(outf, PACKAGE"-"VERSION GIT_HEAD" audio fingerprinting tool\n"
-			"Usage: "PACKAGE" [-hVv] /path/to/audio/file...\n"
+			"Usage: "PACKAGE" [-hVv0] <infile>\n"
 			"\nOptions:\n"
 			"\t-h, --help\tDisplay usage and exit\n"
 			"\t-V, --version\tDisplay version and exit\n"
 			"\t-v, --verbose\tBe verbose\n"
-			"If filename is '-' "PACKAGE" reads from standard input.\n");
+			"\t-0, --print0\tDelimit path and fingerprint by null character instead of space\n"
+			"If <infile> is '-' "PACKAGE" reads from standard input.\n");
 	exit(exitval);
 }
 
-static const char *
-create_print(int fd, int close_desc)
+static bool
+dump_fingerprint(const char *path)
 {
+	bool isstdin;
 	const char *fingerprint;
 	short *data;
 	int essential_frames, ret;
 	SNDFILE *input;
 	SF_INFO info;
+	SF_FORMAT_INFO format_info;
 
-	lgv("Opening fd %d for reading", fd);
+	isstdin = (0 == strncmp(path, "-", 2));
+
 	info.format = 0;
-	input = sf_open_fd(fd, SFM_READ, &info, close_desc);
-	if (NULL == input) {
-		lg("Failed to open file: %s", sf_strerror(NULL));
-		return NULL;
+	if (isstdin)
+		input = sf_open_fd(fileno(stdin), SFM_READ, &info, 0);
+	else
+		input = sf_open(path, SFM_READ, &info);
+
+	if (input == NULL) {
+		lg("Failed to open %s: %s", isstdin ? "stdin" : path, sf_strerror(NULL));
+		return false;
 	}
 
-	if (verbose) {
-		SF_FORMAT_INFO format_info;
-		format_info.format = info.format;
-		sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
-		lg("Format: %s", format_info.name);
-		lg("Frames: %ld", info.frames);
-		lg("Channels: %d", info.channels);
-		lg("Samplerate: %dHz", info.samplerate);
-	}
+	format_info.format = info.format;
+	sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
+	lgv("Format: %s", format_info.name);
+	lgv("Frames: %ld", info.frames);
+	lgv("Channels: %d", info.channels);
+	lgv("Samplerate: %dHz", info.samplerate);
 
 	if ((data = malloc(info.frames * info.channels * sizeof(short))) == NULL) {
 		lg("Failed to allocate memory for data: %s", strerror(errno));
@@ -125,38 +131,47 @@ create_print(int fd, int close_desc)
 	memset(data, 0, info.frames * info.channels * sizeof(short));
 
 	essential_frames = ESSENTIAL_SECONDS * info.samplerate * info.channels;
-	lgv("Reading audio data, essential seconds: %d essential frames: %d", ESSENTIAL_SECONDS, essential_frames);
 	if (essential_frames > info.frames) {
-		lgv("Essential frames: %d > info.frames: %ld, adjusting", essential_frames, info.frames);
+		lgv("essential_frames: %d > frames: %ld, adjusting", essential_frames, info.frames);
 		essential_frames = info.frames;
 	}
+
 	ret = sf_readf_short(input, data, essential_frames);
 	assert(essential_frames == ret);
+	sf_close(input);
 
 	fingerprint = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
 			essential_frames, info.samplerate, 2 == info.channels);
-
-	sf_close(input);
 	free(data);
-	return fingerprint;
+
+	if (isstdin)
+		printf("/dev/stdin.%s", format_info.extension);
+	else
+		printf("%s", path);
+
+	fputc(print0 ? '\0' : ' ', stdout);
+
+	printf("%s\n", fingerprint);
+	fflush(stdout);
+
+	return true;
 }
 
 int
 main(int argc, char **argv)
 {
-	bool isstdin;
-	const char *fingerprint;
-	int optc, fd, ret;
-	FILE *fp;
+	int optc;
 	struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
 		{"verbose", no_argument, NULL, 'v'},
+		{"print0", no_argument, NULL, '0'},
 		{0, 0, NULL, 0}
 	};
 
-	verbose = 0;
-	while ((optc = getopt_long(argc, argv, "hVv", long_options, NULL)) != -1) {
+	verbose = false;
+	print0 = false;
+	while ((optc = getopt_long(argc, argv, "hVv0", long_options, NULL)) != -1) {
 		switch (optc) {
 		case 'h':
 			usage(stdout, 0);
@@ -164,7 +179,10 @@ main(int argc, char **argv)
 			about();
 			return EXIT_SUCCESS;
 		case 'v':
-			verbose = 1;
+			verbose = true;
+			break;
+		case '0':
+			print0 = true;
 			break;
 		case '?':
 		default:
@@ -174,32 +192,8 @@ main(int argc, char **argv)
 
 	argc -= optind;
 	argv += optind;
-	if (argc == 0) {
-		fprintf(stderr, "No file given!\n");
-		return EXIT_FAILURE;
-	}
+	if (argc == 0)
+		usage(stderr, 1);
 
-	isstdin = false;
-	ret = EXIT_SUCCESS;
-	for (int i = 0; i < argc; i++) {
-		if (strncmp(argv[i], "-", 2) == 0) {
-			isstdin = true;
-			fd = fileno(stdin);
-		}
-		else {
-			if ((fp = fopen(argv[i], "r")) == NULL) {
-				lg("Failed to open file `%s': %s", argv[i], strerror(errno));
-				ret = EXIT_FAILURE;
-				continue;
-			}
-			fd = fileno(fp);
-		}
-		if ((fingerprint = create_print(fd, 1)) == NULL) {
-			ret = EXIT_FAILURE;
-			continue;
-		}
-		printf("%s: %s\n", isstdin ? "/dev/stdin" : argv[i], fingerprint);
-		isstdin = false;
-	}
-	return ret;
+	return dump_fingerprint(argv[0]) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
