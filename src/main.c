@@ -84,8 +84,8 @@ usage(FILE *outf, int exitval)
 	fprintf(outf, PACKAGE"-"VERSION GIT_HEAD" audio fingerprinting tool\n"
 			"Usage: "PACKAGE" [-hVv] /path/to/audio/file...\n"
 			"\nOptions:\n"
-			"\t-h, --help\tYou're looking at it :)\n"
-			"\t-V, --version\tShow version information\n"
+			"\t-h, --help\tDisplay usage and exit\n"
+			"\t-V, --version\tDisplay version and exit\n"
 			"\t-v, --verbose\tBe verbose\n"
 			"If filename is '-' "PACKAGE" reads from standard input.\n");
 	exit(exitval);
