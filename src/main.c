@@ -97,10 +97,11 @@ static bool
 dump_fingerprint(const char *path)
 {
 	bool isstdin;
-	const char *fingerprint;
+	int ret;
+	long duration, eframes;
+	size_t data_size;
 	short *data;
-	int essential_frames, ret;
-	long duration;
+	const char *fingerprint;
 	SNDFILE *input;
 	SF_INFO info;
 	SF_FORMAT_INFO format_info;
@@ -127,24 +128,25 @@ dump_fingerprint(const char *path)
 	lgv("Samplerate: %dHz", info.samplerate);
 	lgv("Duration: %ldms", duration);
 
-	if ((data = malloc(info.frames * info.channels * sizeof(short))) == NULL) {
+	data_size = info.frames * info.channels * sizeof(short);
+	if ((data = malloc(data_size)) == NULL) {
 		lg("Failed to allocate memory for data: %s", strerror(errno));
 		return NULL;
 	}
-	memset(data, 0, info.frames * info.channels * sizeof(short));
+	memset(data, 0, data_size);
 
-	essential_frames = ESSENTIAL_SECONDS * info.samplerate * info.channels;
-	if (essential_frames > info.frames) {
-		lgv("essential_frames: %d > frames: %ld, adjusting", essential_frames, info.frames);
-		essential_frames = info.frames;
+	eframes = ESSENTIAL_SECONDS * info.samplerate;
+	if (eframes > info.frames) {
+		lgv("essential frames: %ld > frames: %ld, adjusting", eframes, info.frames);
+		eframes = info.frames;
 	}
 
-	ret = sf_readf_short(input, data, essential_frames);
-	assert(essential_frames == ret);
+	ret = sf_readf_short(input, data, eframes);
+	assert(eframes == ret);
 	sf_close(input);
 
-	fingerprint = ofa_create_print((unsigned char *) data, ENDIAN_CPU,
-			essential_frames, info.samplerate, 2 == info.channels);
+	fingerprint = ofa_create_print((unsigned char *)data, ENDIAN_CPU,
+			eframes, info.samplerate, 2 == info.channels);
 	free(data);
 
 	if (isstdin)
