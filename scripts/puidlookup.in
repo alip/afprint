@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# vim: set sw=4 et sts=4 tw=80 :
+# Copyright 2010 Ali Polatel <alip@exherbo.org>
+# Distributed under the terms of the GNU General Public License v2
+
+# Constants
+NAME="$(basename "${0}")"
+VERSION="@VERSION@"
+MUSICDNS_KEY="0a2cbb45cbbe7af5bf61ea5048d7f789"
+MUSICDNS_URI="http://ofa.musicdns.org/ofa/1/track"
+USER_AGENT="${NAME}/${VERSION}"
+
+# Functions
+usage() {
+    cat <<EOF
+${NAME} -- PUID lookup tool
+Usage: ${NAME} [-hVv0]
+\t-h, --help\tDisplay usage and exit
+\t-V, --version\tDisplay version and exit
+\t-v, --verbose\tBe verbose
+\t-0, --null\tExpect input is null delimited
+${NAME} reads filename and audio fingerprint from standard input
+EOF
+}
+
+post() {
+    local fmt="${1}"
+    local dur="${2}"
+    local fpt="${3}"
+    shift 3
+
+    curl "${@}" -A "${USER_AGENT}"      \
+        --data "cid=${MUSICDNS_KEY}"    \
+        --data "cvr=${NAME}-${VERSION}" \
+        --data "fpt=${fpt}"             \
+        --data "rmd=2"                  \
+        --data "brt=0"                  \
+        --data "fmt=${fmt}"             \
+        --data "dur=${dur}"             \
+        --data "art=unknown"            \
+        --data "ttl=unknown"            \
+        --data "alb=unknown"            \
+        --data "tnm=0"                  \
+        --data "gnr=unknown"            \
+        --data "yrr=0"                  \
+        ${MUSICDNS_URI}
+}
+
+# Parse options
+OPT_DELIM=$' '
+CURL_OPTS=()
+
+ARGUMENTS="$(getopt -qo hVv0 -l help,version,verbose,null -- "${@}")"
+eval set -- "${ARGUMENTS}"
+while true; do
+    case "${1}" in
+        -h|--help)
+            usage
+            exit;;
+        -V|--version)
+            echo "${NAME}-${VERSION}"
+            exit;;
+        -0|--null)
+            OPT_DELIM=$'\0'
+            shift;;
+        -v|--verbose)
+            CURL_OPTS+=( --verbose )
+            shift;;
+        --)
+            shift
+            break;;
+        *)
+            echo "${NAME}: Error parsing arguments" >&2
+            exit 1;;
+    esac
+done
+
+IFS= read -r -d "${OPT_DELIM}" FILENAME
+IFS= read -r -d "${OPT_DELIM}" DURATION
+IFS= read -r -d "${OPT_DELIM}" FINGERPRINT
+FINGERPRINT="${FINGERPRINT/$'\n'/}"
+EXTENSION="${FILENAME##*.}"
+post "${EXTENSION}" "${DURATION}" "${FINGERPRINT}" "${CURL_OPTS[@]}"
+

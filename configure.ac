@@ -6,7 +6,8 @@ AC_INIT([src/main.c])
 
 VERSION_MAJOR=0
 VERSION_MINOR=1
-VERSION_FULL="$VERSION_MAJOR.$VERSION_MINOR"
+VERSION_MICRO=0
+VERSION_FULL="$VERSION_MAJOR.$VERSION_MINOR.$VERSION_MICRO"
 VERSION="$VERSION_FULL"
 
 AC_SUBST([VERSION_MAJOR])
@@ -66,5 +67,7 @@ AM_CONFIG_HEADER(config.h)
 AC_OUTPUT(
 		  Makefile
 		  src/Makefile
+		  scripts/Makefile
+		  scripts/puidlookup
 		  )
 dnl }}}

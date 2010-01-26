@@ -24,3 +24,4 @@ Makefile
 /stamp-h1
 
 src/afprint
+scripts/puidlookup
