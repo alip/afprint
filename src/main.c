@@ -27,18 +27,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 #include <ofa1/ofa.h>
 #include <sndfile.h>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
-
-#ifdef WORDS_BIGENDIAN
-#define ENDIAN_CPU OFA_BIG_ENDIAN
-#else
-#define ENDIAN_CPU OFA_LITTLE_ENDIAN
 #endif
 
 #define ESSENTIAL_SECONDS 135
@@ -93,14 +91,81 @@ usage(FILE *outf, int exitval)
 	exit(exitval);
 }
 
+static unsigned char *
+convert_raw(const float *data, long frames, long samplerate, int channels)
+{
+	int pfd[2], pid, status;
+	sf_count_t bufsize, ret;
+	unsigned char *buf;
+	SNDFILE *sf;
+	SF_INFO info;
+
+	info.format = SF_FORMAT_AU | SF_FORMAT_PCM_16 | SF_ENDIAN_LITTLE;
+	info.channels = channels;
+	info.samplerate = samplerate;
+
+	if (pipe(pfd) < 0) {
+		lg("Failed to create pipe: %s", strerror(errno));
+		return NULL;
+	}
+
+	bufsize = frames * channels * 2;
+	if ((buf = calloc(bufsize, sizeof(unsigned char))) == NULL) {
+		lg("Failed to allocate memory: %s", strerror(errno));
+		close(pfd[0]);
+		close(pfd[1]);
+		return NULL;
+	}
+
+	if ((pid = fork()) < 0) {
+		lg("Failed to fork: %s", strerror(errno));
+		free(buf);
+		close(pfd[0]);
+		close(pfd[1]);
+		return NULL;
+	}
+	else if (pid == 0) { /* child */
+		free(buf);
+		close(pfd[0]);
+
+		if ((sf = sf_open_fd(pfd[1], SFM_WRITE, &info, 1)) == NULL) {
+			lg("Failed to open pipe for writing: %s", sf_strerror(NULL));
+			close(pfd[1]);
+			_exit(EXIT_FAILURE);
+		}
+		ret = sf_writef_float(sf, data, frames);
+		sf_close(sf);
+		_exit(ret == frames ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+	/* parent */
+	close(pfd[1]);
+
+	if ((sf = sf_open_fd(pfd[0], SFM_READ, &info, 1)) == NULL) {
+		lg("Failed to open pipe for reading: %s", sf_strerror(NULL));
+		close(pfd[0]);
+		kill(pid, SIGKILL);
+		return NULL;
+	}
+
+	ret = sf_read_raw(sf, buf, bufsize);
+	sf_close(sf);
+	wait(&status);
+	assert(WIFEXITED(status));
+	assert(WEXITSTATUS(status) == EXIT_SUCCESS);
+	assert(ret == bufsize);
+
+	return buf;
+}
+
 static bool
-dump_fingerprint(const char *path)
+dump_print(const char *path)
 {
 	bool isstdin;
 	int ret;
 	long duration, eframes;
 	size_t data_size;
-	short *data;
+	float *data;
+	unsigned char *buf;
 	const char *fingerprint;
 	SNDFILE *input;
 	SF_INFO info;
@@ -119,7 +184,7 @@ dump_fingerprint(const char *path)
 		return false;
 	}
 
-	duration = ((1.0 * info.frames) / info.samplerate) * 1000;
+	duration = info.frames / (info.samplerate / 1000);
 	format_info.format = info.format;
 	sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
 	lgv("Format: %s", format_info.name);
@@ -128,7 +193,7 @@ dump_fingerprint(const char *path)
 	lgv("Samplerate: %dHz", info.samplerate);
 	lgv("Duration: %ldms", duration);
 
-	data_size = info.frames * info.channels * sizeof(short);
+	data_size = info.frames * info.channels * sizeof(float);
 	if ((data = malloc(data_size)) == NULL) {
 		lg("Failed to allocate memory for data: %s", strerror(errno));
 		return NULL;
@@ -141,13 +206,22 @@ dump_fingerprint(const char *path)
 		eframes = info.frames;
 	}
 
-	ret = sf_readf_short(input, data, eframes);
-	assert(eframes == ret);
+	ret = sf_readf_float(input, data, eframes);
+	assert(ret == eframes);
 	sf_close(input);
 
-	fingerprint = ofa_create_print((unsigned char *)data, ENDIAN_CPU,
-			eframes, info.samplerate, 2 == info.channels);
+	buf = convert_raw(data, eframes, info.samplerate, info.channels);
 	free(data);
+	if (buf == NULL)
+		return false;
+
+	fingerprint = ofa_create_print(buf, OFA_LITTLE_ENDIAN,
+			eframes * info.channels, info.samplerate, 2 == info.channels);
+	free(buf);
+	if (fingerprint == NULL) {
+		lg("Failed to calculate fingerprint for %s", isstdin ? "stdin" : path);
+		return false;
+	}
 
 	if (isstdin)
 		printf("/dev/stdin.%s", format_info.extension);
@@ -202,5 +276,5 @@ main(int argc, char **argv)
 	if (argc == 0)
 		usage(stderr, 1);
 
-	return dump_fingerprint(argv[0]) ? EXIT_SUCCESS : EXIT_FAILURE;
+	return dump_print(argv[0]) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

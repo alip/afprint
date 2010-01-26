@@ -44,10 +44,6 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 dnl }}}
 
-dnl {{{ check for byte order
-AC_C_BIGENDIAN
-dnl }}}
-
 dnl {{{ check for libraries
 PKG_PROG_PKG_CONFIG([0.20.0])
 PKG_CHECK_MODULES([libofa], [libofa],,
