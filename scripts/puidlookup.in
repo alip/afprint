@@ -5,7 +5,7 @@
 
 # Constants
 NAME="$(basename "${0}")"
-VERSION="@VERSION@"
+VERSION="@AFPRINT_VERSION@"
 MUSICDNS_KEY="0a2cbb45cbbe7af5bf61ea5048d7f789"
 MUSICDNS_URI="http://ofa.musicdns.org/ofa/1/track"
 USER_AGENT="${NAME}/${VERSION}"
@@ -48,7 +48,7 @@ post() {
 
 # Parse options
 OPT_DELIM=$' '
-CURL_OPTS=()
+CURL_OPTS=( --silent )
 
 ARGUMENTS="$(getopt -qo hVv0 -l help,version,verbose,null -- "${@}")"
 eval set -- "${ARGUMENTS}"
@@ -80,5 +80,6 @@ IFS= read -r -d "${OPT_DELIM}" DURATION
 IFS= read -r -d "${OPT_DELIM}" FINGERPRINT
 FINGERPRINT="${FINGERPRINT/$'\n'/}"
 EXTENSION="${FILENAME##*.}"
-post "${EXTENSION}" "${DURATION}" "${FINGERPRINT}" "${CURL_OPTS[@]}"
-
+post "${EXTENSION}" "${DURATION}" "${FINGERPRINT}" "${CURL_OPTS[@]}" |\
+egrep '[[:space:]]+<puid id=' a.xml |\
+sed -e 's:[^"]*"\([^"]*\)".*:\1:'
