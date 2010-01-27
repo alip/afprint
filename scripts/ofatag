@@ -1,0 +1,39 @@
+#!/bin/sh
+# vim: set sw=4 et sts=4 tw=80 :
+# Copyright 2010 Ali Polatel <alip@exherbo.org>
+# Distributed under the terms of the GNU General Public License v2
+
+FILE="$(which file 2>/dev/null)"
+
+ismp3() {
+    local fname="${1}"
+
+    if [ -n "${FILE}" ]; then
+        local ftype=$(file -i "${fname}" | cut -d' ' -f2)
+        [ "${ftype}" = "audio/mpeg;" ] && return 0
+    else
+        local ext="${fname##*.}"
+        [ "${ext}" = "mp3" ] && return 0
+    fi
+    return 1
+}
+
+for f in "${@}"; do
+    unset ARTIST TITLE ALBUM TRACK
+
+    if ismp3 "${f}"; then
+        out="$(mpg123 -q --au - "${f}" | afprint -0 - | puidlookup -0 -l 0 -m)"
+    else
+        out="$(afprint -0 "${f}" | puidlookup -0 -l 0 -m)"
+    fi
+    if [ 0 == $? -a -n "${out}" ]; then
+        eval "${out}"
+        [ -n "${ARTIST}" ] && export ARTIST
+        [ -n "${TITLE}" ]  && export TITLE
+        [ -n "${ALBUM}" ]  && export ALBUM
+        [ -n "${TRACK}" ]  && export TRACK
+        envtag set -v "${f}"
+    else
+        echo "Failed to set tags of ${f}" >&2
+    fi
+done
