@@ -41,12 +41,27 @@ AC_PROG_CC_C99
 if test x"$ac_cv_prog_cc_c99" = x"no"; then
 	AC_MSG_ERROR([afprint requires a C compiler that supports ISO C99!])
 fi
+AC_GNU_SOURCE
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_PROG_SED
 dnl }}}
 
+dnl {{{ check for functions
+AC_CHECK_FUNCS([splice])
+dnl }}}
+
 dnl {{{ check for libraries
+AC_CHECK_LIB([rt], [shm_open],
+			 HAVE_SHM="yes",
+			 HAVE_SHM="no",)
+if test x"$HAVE_SHM" = x"yes"; then
+	AC_DEFINE([HAVE_SHM], [1], [Define for SHM support])
+	LDFLAGS="$LDFLAGS -lrt"
+else
+	AC_DEFINE([HAVE_SHM], [0], [Define for SHM support])
+fi
+
 PKG_PROG_PKG_CONFIG([0.20.0])
 PKG_CHECK_MODULES([libofa], [libofa],,
 				  [AC_MSG_ERROR([afprint requires libofa])])
