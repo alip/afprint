@@ -49,6 +49,7 @@ static char fname_shm[SHM_LEN];
 #include <ofa1/ofa.h>
 #include <sndfile.h>
 
+#define ENV_NO_SHM "AFPRINT_NO_SHM"
 #define ESSENTIAL_SECONDS 135
 
 static bool verbose;
@@ -306,13 +307,15 @@ dump_print(const char *path)
 
 	if (isstdin) {
 #if HAVE_SHM
-		snprintf(fname_shm, sizeof(fname_shm), "%s-%d", SHM_PREFIX, getpid());
-		if ((shm = copy_stdin_shm(fname_shm)) < 0)
-			input = sf_open_fd(STDIN_FILENO, SFM_READ, &info, SF_TRUE);
-		else {
+		if (!getenv(ENV_NO_SHM)) {
+			snprintf(fname_shm, sizeof(fname_shm), "%s-%d", SHM_PREFIX, getpid());
+			if ((shm = copy_stdin_shm(fname_shm)) < 0)
+				return false;
 			unlink_shm = true;
 			input = sf_open_fd(shm, SFM_READ, &info, SF_TRUE);
 		}
+		else
+			input = sf_open_fd(STDIN_FILENO, SFM_READ, &info, SF_TRUE);
 #else
 		input = sf_open_fd(STDIN_FILENO, SFM_READ, &info, SF_TRUE);
 #endif /* HAVE_SHM */
@@ -320,7 +323,7 @@ dump_print(const char *path)
 	else
 		input = sf_open(path, SFM_READ, &info);
 
-	if (input == NULL) {
+	if (!input) {
 		lg("Failed to open %s: %s", isstdin ? "stdin" : path, sf_strerror(NULL));
 		return false;
 	}
@@ -341,7 +344,7 @@ dump_print(const char *path)
 	}
 
 	data_size = eframes * info.channels * sizeof(float);
-	if ((data = malloc(data_size)) == NULL) {
+	if (!(data = malloc(data_size))) {
 		lg("Failed to allocate memory for data: %s", strerror(errno));
 		return NULL;
 	}
@@ -353,13 +356,13 @@ dump_print(const char *path)
 
 	buf = convert_raw(data, eframes, info.samplerate, info.channels);
 	free(data);
-	if (buf == NULL)
+	if (!buf)
 		return false;
 
 	fingerprint = ofa_create_print(buf, OFA_LITTLE_ENDIAN,
 			eframes * info.channels, info.samplerate, 2 == info.channels);
 	free(buf);
-	if (fingerprint == NULL) {
+	if (!fingerprint) {
 		lg("Failed to calculate fingerprint for %s", isstdin ? "stdin" : path);
 		return false;
 	}
