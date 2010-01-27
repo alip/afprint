@@ -24,6 +24,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -36,20 +37,10 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#if HAVE_SHM
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#define SHM_PREFIX "afprint-stdin"
-#define SHM_LEN (sizeof(SHM_PREFIX) + 32)
-static bool unlink_shm = false;
-static char fname_shm[SHM_LEN];
-#endif /* HAVE_SHM */
-
 #include <ofa1/ofa.h>
 #include <sndfile.h>
 
-#define ENV_NO_SHM "AFPRINT_NO_SHM"
+#define ENV_NO_TEMP "AFPRINT_NO_TEMP"
 #define ESSENTIAL_SECONDS 135
 
 static bool verbose;
@@ -100,26 +91,6 @@ usage(FILE *outf, int exitval)
 			"\t-0, --print0\tDelimit path and fingerprint by null character instead of space\n"
 			"If <infile> is '-' "PACKAGE" reads from standard input.\n");
 	exit(exitval);
-}
-
-static void cleanup(void)
-{
-	if (unlink_shm)
-		shm_unlink(fname_shm);
-}
-
-static void sig_cleanup(int signum)
-{
-	struct sigaction action;
-
-	lg("Caught signal %d exiting", signum);
-
-	cleanup();
-
-	sigaction(signum, NULL, &action);
-	action.sa_handler = SIG_DFL;
-	sigaction(signum, &action, NULL);
-	raise(signum);
 }
 
 static unsigned char *
@@ -188,16 +159,17 @@ convert_raw(const float *data, long frames, long samplerate, int channels)
 	return buf;
 }
 
-#if HAVE_SHM
 static int
-copy_stdin_shm(const char *filename)
+copy_stdin_temp(void)
 {
 	int fd, ret, written;
+	FILE *fp;
 
-	if ((fd = shm_open(filename, O_RDWR | O_CREAT | O_TRUNC, 0600)) < 0) {
-		lg("Opening shared memory object failed: %s", strerror(errno));
+	if (!(fp = tmpfile())) {
+		lg("Failed to create temporary file: %s", strerror(errno));
 		return -1;
 	}
+	fd = fileno(fp);
 
 #ifdef HAVE_SPLICE
 	int pfd[2];
@@ -221,13 +193,13 @@ copy_stdin_shm(const char *filename)
 		do {
 			written = splice(pfd[0], NULL, fd, NULL, ret, 0);
 			if (!written) {
-				lg("Splicing data to shared memory object failed: %s", strerror(errno));
+				lg("Splicing data to temporary file failed: %s", strerror(errno));
 				close(pfd[0]);
 				close(pfd[1]);
 				goto fail;
 			}
 			if (written < 0) {
-				lg("Splicing data to shared memory object failed: %s", strerror(errno));
+				lg("Splicing data to temporary file failed: %s", strerror(errno));
 				close(pfd[0]);
 				close(pfd[1]);
 				goto fail;
@@ -256,40 +228,37 @@ copy_stdin_shm(const char *filename)
 		do {
 			written = write(fd, p, ret);
 			if (!written) {
-				lg("Writing to shared memory object failed: %s", strerror(errno));
+				lg("Writing to temporary file failed: %s", strerror(errno));
 				goto fail;
 			}
 			if (written < 0) {
 				if (errno == EINTR)
 					continue;
-				lg("Writing to shared memory object failed: %s", strerror(errno));
+				lg("Writing to temporary file failed: %s", strerror(errno));
 				goto fail;
 			}
 			p += written;
 			ret -= written;
 		} while (ret);
 	}
-
 #endif /* HAVE_SPLICE */
 
 	if (lseek(fd, 0, SEEK_SET) < 0) {
-		lg("Seeking in shared memory object failed: %s", strerror(errno));
+		lg("Seeking in temporary file failed: %s", strerror(errno));
 		goto fail;
 	}
 
 	return fd;
 fail:
 	close(fd);
-	shm_unlink(filename);
 	return -1;
 }
-#endif /* HAVE_SHM */
 
 static bool
 dump_print(const char *path)
 {
 	bool isstdin;
-	int ret;
+	int ret, tmpfd;
 	long duration, eframes;
 	size_t data_size;
 	float *data;
@@ -298,27 +267,18 @@ dump_print(const char *path)
 	SNDFILE *input;
 	SF_INFO info;
 	SF_FORMAT_INFO format_info;
-#if HAVE_SHM
-	int shm = -1;
-#endif /* HAVE_SHM */
 
 	isstdin = (0 == strncmp(path, "-", 2));
 	info.format = 0;
 
 	if (isstdin) {
-#if HAVE_SHM
-		if (!getenv(ENV_NO_SHM)) {
-			snprintf(fname_shm, sizeof(fname_shm), "%s-%d", SHM_PREFIX, getpid());
-			if ((shm = copy_stdin_shm(fname_shm)) < 0)
+		if (!getenv(ENV_NO_TEMP)) {
+			if ((tmpfd = copy_stdin_temp()) < 0)
 				return false;
-			unlink_shm = true;
-			input = sf_open_fd(shm, SFM_READ, &info, SF_TRUE);
+			input = sf_open_fd(tmpfd, SFM_READ, &info, SF_TRUE);
 		}
 		else
 			input = sf_open_fd(STDIN_FILENO, SFM_READ, &info, SF_TRUE);
-#else
-		input = sf_open_fd(STDIN_FILENO, SFM_READ, &info, SF_TRUE);
-#endif /* HAVE_SHM */
 	}
 	else
 		input = sf_open(path, SFM_READ, &info);
@@ -393,7 +353,6 @@ main(int argc, char **argv)
 		{"print0", no_argument, NULL, '0'},
 		{0, 0, NULL, 0}
 	};
-	struct sigaction new_action, old_action;
 
 	verbose = false;
 	print0 = false;
@@ -420,26 +379,6 @@ main(int argc, char **argv)
 	argv += optind;
 	if (argc == 0)
 		usage(stderr, 1);
-
-	atexit(cleanup);
-
-	new_action.sa_handler = sig_cleanup;
-	sigemptyset(&new_action.sa_mask);
-	new_action.sa_flags = 0;
-
-#define HANDLE_SIGNAL(sig)				\
-	do {						\
-	sigaction ((sig), NULL, &old_action);		\
-	if (old_action.sa_handler != SIG_IGN)		\
-		sigaction ((sig), &new_action, NULL);	\
-	} while (0)
-
-	HANDLE_SIGNAL(SIGABRT);
-	HANDLE_SIGNAL(SIGSEGV);
-	HANDLE_SIGNAL(SIGINT);
-	HANDLE_SIGNAL(SIGTERM);
-
-#undef HANDLE_SIGNAL
 
 	return dump_print(argv[0]) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

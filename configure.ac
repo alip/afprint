@@ -52,16 +52,6 @@ AC_CHECK_FUNCS([splice])
 dnl }}}
 
 dnl {{{ check for libraries
-AC_CHECK_LIB([rt], [shm_open],
-			 HAVE_SHM="yes",
-			 HAVE_SHM="no",)
-if test x"$HAVE_SHM" = x"yes"; then
-	AC_DEFINE([HAVE_SHM], [1], [Define for SHM support])
-	LDFLAGS="$LDFLAGS -lrt"
-else
-	AC_DEFINE([HAVE_SHM], [0], [Define for SHM support])
-fi
-
 PKG_PROG_PKG_CONFIG([0.20.0])
 PKG_CHECK_MODULES([libofa], [libofa],,
 				  [AC_MSG_ERROR([afprint requires libofa])])
