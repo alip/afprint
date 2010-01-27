@@ -174,12 +174,7 @@ dump_print(const char *path)
 	isstdin = (0 == strncmp(path, "-", 2));
 
 	info.format = 0;
-	if (isstdin)
-		input = sf_open_fd(fileno(stdin), SFM_READ, &info, 0);
-	else
-		input = sf_open(path, SFM_READ, &info);
-
-	if (input == NULL) {
+	if ((input = sf_open(path, SFM_READ, &info)) == NULL) {
 		lg("Failed to open %s: %s", isstdin ? "stdin" : path, sf_strerror(NULL));
 		return false;
 	}
