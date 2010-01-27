@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# vim: set sw=4 et sts=4 tw=80 :
+# vim: set sw=4 et sts=4 tw=120 :
 # Copyright 2010 Ali Polatel <alip@exherbo.org>
 # Based in part upon Audio::Ofa::Util which is:
 #   Copyright 2008-2009 Christoph Bußenius
@@ -209,10 +209,12 @@ foreach (@res) {
         my $track;
         foreach $track (@tracks) {
             print "PUID=" . $puid . "\n";
-            print "TRACKID=" . $track->id() . "\n";
-            print "ARTISTID=" . $track->artist()->id() . "\n";
-            print "ARTIST=" . quote($track->artist()->name()) . "\n";
-            print "TITLE=" . quote($track->title()) . "\n";
+            print "TRACKID=" . $track->id . "\n";
+            print "ARTISTID=" . $track->artist->id . "\n";
+            print "ARTIST=" . quote($track->artist->name) . "\n";
+            print "TITLE=" . quote($track->title) . "\n";
+            print "TRACK=" . (($track->release_list->releases->[0]->track_list->offset || 0) + 1) . "\n";
+            print "ALBUM=" . quote($track->release_list->releases->[0]->title) . "\n";
         }
     }
 }
