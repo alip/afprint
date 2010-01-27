@@ -1,85 +1,218 @@
-#!/usr/bin/env bash
+#!/usr/bin/env perl
 # vim: set sw=4 et sts=4 tw=80 :
 # Copyright 2010 Ali Polatel <alip@exherbo.org>
+# Based in part upon Audio::Ofa::Util which is:
+#   Copyright 2008-2009 Christoph Bußenius
 # Distributed under the terms of the GNU General Public License v2
 
-# Constants
-NAME="$(basename "${0}")"
-VERSION="@AFPRINT_VERSION@"
-MUSICDNS_KEY="0a2cbb45cbbe7af5bf61ea5048d7f789"
-MUSICDNS_URI="http://ofa.musicdns.org/ofa/1/track"
-USER_AGENT="${NAME}/${VERSION}"
+use warnings;
+use strict;
+use Carp;
+use Data::Dumper;
+use File::Basename;
+use Getopt::Long;
+use LWP::UserAgent;
+use Time::HiRes;
+use XML::Simple;
 
-# Functions
-usage() {
-    cat <<EOF
-${NAME} -- PUID lookup tool
-Usage: ${NAME} [-hVv0]
-\t-h, --help\tDisplay usage and exit
-\t-V, --version\tDisplay version and exit
-\t-v, --verbose\tBe verbose
-\t-0, --null\tExpect input is null delimited
-${NAME} reads filename and audio fingerprint from standard input
-EOF
+my %musicdns_parameters = (
+    client_id      => ['cid', '0a2cbb45cbbe7af5bf61ea5048d7f789'],
+    client_version => ['cvr', basename($0) . '-@MYVERSION@'],
+    fingerprint    => ['fpt', undef],
+    metadata       => ['rmd', 1],
+    bitrate        => ['brt', 0],
+    extension      => ['fmt', undef],
+    duration       => ['dur', undef],
+    artist         => ['art', 'unknown'],
+    title          => ['ttl', 'unknown'],
+    album          => ['alb', 'unknown'],
+    track          => ['tnm', 0],
+    genre          => ['gnr', 'unknown'],
+    year           => ['yrr', 0],
+);
+
+sub about {
+    my $sig = shift;
+    my $prog = basename($0);
+    my $version = '@MYVERSION@';
+    my $githead = '@MYGITHEAD@';
+    print "$prog-$version$githead\n";
+    exit($sig);
 }
 
-post() {
-    local fmt="${1}"
-    local dur="${2}"
-    local fpt="${3}"
-    shift 3
-
-    curl "${@}" -A "${USER_AGENT}"      \
-        --data "cid=${MUSICDNS_KEY}"    \
-        --data "cvr=${NAME}-${VERSION}" \
-        --data "fpt=${fpt}"             \
-        --data "rmd=2"                  \
-        --data "brt=0"                  \
-        --data "fmt=${fmt}"             \
-        --data "dur=${dur}"             \
-        --data "art=unknown"            \
-        --data "ttl=unknown"            \
-        --data "alb=unknown"            \
-        --data "tnm=0"                  \
-        --data "gnr=unknown"            \
-        --data "yrr=0"                  \
-        ${MUSICDNS_URI}
+sub usage {
+    my $sig = shift;
+    my $prog = basename($0);
+    print <<EOH;
+Usage: $prog [-hVv0]
+    -h, --help          Display usage and exit
+    -V, --version       Display version and exit
+    -v, --verbose       Be verbose
+    -0, --null          Expect input is null delimited
+    -m, --musicbrainz   Look up PUIDs from MusicBrainz
+                        (requires WebService-MusicBrainz)
+    -l, --limit         Limit results to the given number
+$prog reads filename, duration and audio fingerprint from standard input
+EOH
+    exit($sig);
 }
 
-# Parse options
-OPT_DELIM=$' '
-CURL_OPTS=( --silent )
+sub quote {
+    my $s = shift;
+    $s =~ "s/'/'\\''/g";
+    return "'" . $s . "'";
+}
 
-ARGUMENTS="$(getopt -qo hVv0 -l help,version,verbose,null -- "${@}")"
-eval set -- "${ARGUMENTS}"
-while true; do
-    case "${1}" in
-        -h|--help)
-            usage
-            exit;;
-        -V|--version)
-            echo "${NAME}-${VERSION}"
-            exit;;
-        -0|--null)
-            OPT_DELIM=$'\0'
-            shift;;
-        -v|--verbose)
-            CURL_OPTS+=( --verbose )
-            shift;;
-        --)
-            shift
-            break;;
-        *)
-            echo "${NAME}: Error parsing arguments" >&2
-            exit 1;;
-    esac
-done
+sub lim {
+    my @a = shift;
+    my $l = shift;
 
-IFS= read -r -d "${OPT_DELIM}" FILENAME
-IFS= read -r -d "${OPT_DELIM}" DURATION
-IFS= read -r -d "${OPT_DELIM}" FINGERPRINT
-FINGERPRINT="${FINGERPRINT/$'\n'/}"
-EXTENSION="${FILENAME##*.}"
-post "${EXTENSION}" "${DURATION}" "${FINGERPRINT}" "${CURL_OPTS[@]}" |\
-egrep '[[:space:]]+<puid id=' a.xml |\
-sed -e 's:[^"]*"\([^"]*\)".*:\1:'
+    if ($l >= 0) {
+        if ($l >= scalar(@a)) {
+            $l = scalar(@a) - 1;
+        }
+        return @a[0..$l];
+    }
+    return @a;
+}
+
+sub lookup {
+    my $ext = shift;
+    my $dur = shift;
+    my $fp  = shift;
+
+    my %req_params;
+    while (my ($key, $val) = each %musicdns_parameters) {
+        my ($param, $default) = @$val;
+
+        if ($key eq "extension") {
+            $req_params{$param} = $ext;
+        }
+        elsif ($key eq "duration") {
+            $req_params{$param} = $dur;
+        }
+        elsif ($key eq "fingerprint") {
+            $req_params{$param} = $fp;
+        }
+        else {
+            $req_params{$param} = $default;
+        }
+    }
+    utf8::encode($_) for values %req_params;
+
+    my $url = 'http://ofa.musicdns.org/ofa/1/track';
+    my $ua = LWP::UserAgent->new;
+    $ua->env_proxy;
+
+    my $response = $ua->post($url, \%req_params);
+
+    unless ($response->is_success) {
+        croak 'Server says ' . $response->status_line;
+    }
+    unless ('text/xml' eq $response->header('Content-Type')) {
+        croak 'Unexpected content type: ' . $response->header('Content-Type');
+    }
+    unless (defined $response->content) {
+        croak 'No content';
+    }
+
+    my $xml = XMLin($response->content, ForceArray => ['track', 'puid']);
+
+    my @ret = map {
+        +{
+            title => $_->{title},
+            artist => $_->{artist}{name},
+            puids => [keys %{$_->{'puid-list'}{puid}}],
+        };
+    } @{$xml->{track}};
+
+    croak 'No tracks returned' unless @ret;
+    return @ret;
+}
+
+# MusicBrainz demands that we not look up more often than once a second.
+my $last_mb_lookup = 0;
+
+sub mblookup {
+    my $puid = shift;
+
+    require WebService::MusicBrainz::Track;
+    my $ws = WebService::MusicBrainz::Track->new();
+
+    my $next_lookup_in = $last_mb_lookup + 1 - Time::HiRes::time();
+    if ($next_lookup_in > 0 && $next_lookup_in < 1) {
+        Time::HiRes::sleep($next_lookup_in);
+    }
+    $last_mb_lookup = Time::HiRes::time();
+
+    local $@;
+    local $SIG{__DIE__};
+
+    my $resp = eval { $ws->search({ PUID => $puid }) };
+
+    unless ($resp && $resp->track_list) {
+        if ($@) {
+            # search throws exception e.g. for "503 Service Temporarily
+            # Unavailable" errors
+            croak $@;
+        }
+        croak "Search failed";
+    }
+
+    return $resp->track_list;
+}
+
+my $null     =  0;
+my $verbose  =  0;
+my $limit    = -1;
+my $mblookup =  0;
+GetOptions(
+    'v|verbose!'    => \$verbose,
+    '0|null'        => \$null,
+    'l|limit=i'     => \$limit,
+    'm|musicbrainz' => \$mblookup,
+    'V|version'     => sub { about(0) },
+    'h|help'        => sub { usage(0) }
+);
+
+my $line = <STDIN>;
+chomp($line);
+my ($fn, $dur, $fp) = split($null ? "\0" : " ", $line);
+
+my $ext = ($fn =~ m/([^.]+)$/)[0];
+if ($ext eq $fn) {
+    $ext = "unknown";
+}
+
+my @res = lookup($ext, $dur, $fp);
+@res = lim(@res, $limit);
+
+unless ($mblookup) {
+    foreach (@res) {
+        print "ARTIST=" . quote($_->{artist}) . "\n";
+        print "TITLE=" . quote($_->{title}) . "\n";
+
+        my $puid;
+        foreach $puid ($_->{puids}[0]) {
+            print "PUID=" . $puid . "\n";
+        }
+    }
+    exit(0);
+}
+
+foreach (@res) {
+    my $puid;
+    foreach $puid ($_->{puids}[0]) {
+        my @tracks = mblookup($puid);
+        @tracks = lim(@tracks, $limit);
+
+        my $track;
+        foreach $track (@tracks) {
+            print "PUID=" . $puid . "\n";
+            print "TRACKID=" . $track->id() . "\n";
+            print "ARTISTID=" . $track->artist()->id() . "\n";
+            print "ARTIST=" . quote($track->artist()->name()) . "\n";
+            print "TITLE=" . quote($track->title()) . "\n";
+        }
+    }
+}
