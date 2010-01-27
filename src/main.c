@@ -188,18 +188,18 @@ dump_print(const char *path)
 	lgv("Samplerate: %dHz", info.samplerate);
 	lgv("Duration: %ldms", duration);
 
-	data_size = info.frames * info.channels * sizeof(float);
-	if ((data = malloc(data_size)) == NULL) {
-		lg("Failed to allocate memory for data: %s", strerror(errno));
-		return NULL;
-	}
-	memset(data, 0, data_size);
-
 	eframes = ESSENTIAL_SECONDS * info.samplerate;
 	if (eframes > info.frames) {
 		lgv("essential frames: %ld > frames: %ld, adjusting", eframes, info.frames);
 		eframes = info.frames;
 	}
+
+	data_size = eframes * info.channels * sizeof(float);
+	if ((data = malloc(data_size)) == NULL) {
+		lg("Failed to allocate memory for data: %s", strerror(errno));
+		return NULL;
+	}
+	memset(data, 0, data_size);
 
 	ret = sf_readf_float(input, data, eframes);
 	assert(ret == eframes);
