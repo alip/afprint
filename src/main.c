@@ -18,6 +18,10 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <getopt.h>
@@ -34,10 +38,6 @@
 
 #include <ofa1/ofa.h>
 #include <sndfile.h>
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
 
 #define ESSENTIAL_SECONDS 135
 
