@@ -15,6 +15,8 @@ use LWP::UserAgent;
 use Time::HiRes;
 use XML::Simple;
 
+binmode STDOUT, ":utf8";
+
 my %musicdns_parameters = (
     client_id      => ['cid', '0a2cbb45cbbe7af5bf61ea5048d7f789'],
     client_version => ['cvr', basename($0) . '-@MYVERSION@'],
@@ -57,10 +59,10 @@ EOH
     exit($sig);
 }
 
-sub quote {
+sub escape {
     my $s = shift;
     $s =~ s/'/'\\''/g;
-    return "'" . $s . "'";
+    return $s;
 }
 
 sub lim {
@@ -194,12 +196,12 @@ my @res = lookup($ext, $dur, $fp);
 
 unless ($mblookup) {
     foreach (@res) {
-        print "ARTIST=" . quote($_->{artist}) . "\n";
-        print "TITLE=" . quote($_->{title}) . "\n";
+        print "ARTIST='", escape($_->{artist}), "'\n";
+        print "TITLE='", escape($_->{title}), "'\n";
 
         my $puid;
         foreach $puid ($_->{puids}[0]) {
-            print "PUID=" . $puid . "\n";
+            print "PUID=", $puid, "\n";
         }
     }
     exit(0);
@@ -213,13 +215,13 @@ foreach (@res) {
 
         my $track;
         foreach $track (@tracks) {
-            print "PUID=" . $puid . "\n";
-            print "TRACKID=" . $track->id . "\n";
-            print "ARTISTID=" . $track->artist->id . "\n";
-            print "ARTIST=" . quote($track->artist->name) . "\n";
-            print "TITLE=" . quote($track->title) . "\n";
-            print "TRACK=" . (($track->release_list->releases->[0]->track_list->offset || 0) + 1) . "\n";
-            print "ALBUM=" . quote($track->release_list->releases->[0]->title) . "\n";
+            print "PUID=", $puid, "\n";
+            print "TRACKID=", $track->id, "\n";
+            print "ARTISTID=", $track->artist->id, "\n";
+            print "ARTIST='", escape($track->artist->name), "'\n";
+            print "TITLE='", escape($track->title), "'\n";
+            print "TRACK=", (($track->release_list->releases->[0]->track_list->offset || 0) + 1), "\n";
+            print "ALBUM='", escape($track->release_list->releases->[0]->title), "'\n";
         }
     }
 }
