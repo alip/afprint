@@ -176,8 +176,13 @@ GetOptions(
 );
 
 my $line = <STDIN>;
+die "failed to read from standard input" unless defined $line;
+
 chomp($line);
 my ($fn, $dur, $fp) = split($null ? "\0" : " ", $line);
+die "no filename" unless defined $fn;
+die "no duration" unless defined $dur;
+die "no fingerprint" unless defined $fp;
 
 my $ext = ($fn =~ m/([^.]+)$/)[0];
 if ($ext eq $fn) {
