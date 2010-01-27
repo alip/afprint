@@ -59,7 +59,7 @@ EOH
 
 sub quote {
     my $s = shift;
-    $s =~ "s/'/'\\''/g";
+    $s =~ s/'/'\\''/g;
     return "'" . $s . "'";
 }
 
