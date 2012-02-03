@@ -292,14 +292,14 @@ dump_print(const char *path)
 	format_info.format = info.format;
 	sf_command(input, SFC_GET_FORMAT_INFO, &format_info, sizeof(format_info));
 	lgv("Format: %s", format_info.name);
-	lgv("Frames: %ld", info.frames);
+	lgv("Frames: %ld", (long)info.frames);
 	lgv("Channels: %d", info.channels);
 	lgv("Samplerate: %dHz", info.samplerate);
 	lgv("Duration: %ldms", duration);
 
 	eframes = ESSENTIAL_SECONDS * info.samplerate;
 	if (eframes > info.frames) {
-		lgv("essential frames: %ld > frames: %ld, adjusting", eframes, info.frames);
+		lgv("essential frames: %ld > frames: %ld, adjusting", eframes, (long)info.frames);
 		eframes = info.frames;
 	}
 
